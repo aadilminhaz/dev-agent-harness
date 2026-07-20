@@ -1,0 +1,268 @@
+# MR/PR Review Rules
+# Each rule defines what to check, severity level, and guidance for the reviewer.
+# Severity levels:
+#   - required: Must fix before merge. Blocks approval.
+#   - recommendation: Should address before merge. Strongly encouraged.
+#   - suggestion: Nice-to-have improvement. Non-blocking.
+
+rules:
+
+  # ─── Security ────────────────────────────────────────────────────────────────
+
+  - id: SEC-001
+    category: Security
+    severity: required
+    name: No hardcoded secrets
+    description: >
+      Code must not contain hardcoded passwords, API keys, tokens, or connection strings.
+    detect: >
+      Look for string literals resembling passwords, tokens, API keys, bearer tokens,
+      or connection strings. Check for patterns like "password = ", "apiKey:", "Bearer ",
+      base64-encoded secrets, or AWS/GCP credential patterns.
+    rationale: >
+      Hardcoded secrets in source code can be leaked through version control,
+      logs, or error messages. Use environment variables or secret managers.
+    applies_to: "**/*.{java,kt,ts,js,py,yml,yaml,properties,json}"
+    exclude: "**/test/**"
+
+  - id: SEC-002
+    category: Security
+    severity: required
+    name: No SQL string concatenation
+    description: >
+      SQL queries must use parameterised queries or prepared statements, never string concatenation.
+    detect: >
+      Look for SQL keywords (SELECT, INSERT, UPDATE, DELETE) combined with string
+      concatenation (+, String.format, f-strings, template literals) or variable interpolation.
+    rationale: >
+      String concatenation in SQL enables SQL injection attacks even when inputs
+      appear pre-validated upstream.
+    applies_to: "**/*.{java,kt,ts,js,py}"
+
+  - id: SEC-003
+    category: Security
+    severity: recommendation
+    name: Input validation on public endpoints
+    description: >
+      Public-facing API endpoints must validate and sanitise input parameters.
+    detect: >
+      Check controller/handler methods annotated with @PostMapping, @PutMapping, or
+      equivalent for presence of @Valid, @Validated, or manual input validation logic.
+    rationale: >
+      Unvalidated input is the root cause of injection, overflow, and logic bypass vulnerabilities.
+    applies_to: "**/*Controller*.{java,kt}"
+
+  # ─── Code Quality ───────────────────────────────────────────────────────────
+
+  - id: CQ-001
+    category: Code Quality
+    severity: recommendation
+    name: No commented-out code
+    description: >
+      Commented-out code blocks should be removed rather than left in the codebase.
+    detect: >
+      Look for multi-line comments or consecutive single-line comments that contain
+      syntactically valid code (method calls, variable declarations, control flow).
+      Ignore documentation comments and TODOs.
+    rationale: >
+      Commented-out code adds noise, causes confusion about intent, and is
+      preserved in version control history if needed later.
+    applies_to: "**/*.{java,kt,ts,js,py}"
+
+  - id: CQ-002
+    category: Code Quality
+    severity: suggestion
+    name: No magic numbers
+    description: >
+      Numeric literals (other than 0, 1, -1) should be extracted to named constants.
+    detect: >
+      Look for numeric literals in logic/conditional expressions that aren't
+      defined as constants. Ignore array indices 0/1, loop bounds, and test assertions.
+    rationale: >
+      Named constants make code self-documenting and enable single-point changes.
+    applies_to: "**/*.{java,kt,ts,js}"
+    exclude: "**/test/**"
+
+  - id: CQ-003
+    category: Code Quality
+    severity: recommendation
+    name: TODOs must reference a ticket
+    description: >
+      TODO/FIXME/HACK comments must include a ticket reference matching the project's
+      ticket ID pattern (configured in issue_tracker).
+    detect: >
+      Look for TODO, FIXME, or HACK comments that do NOT contain a recognisable
+      ticket reference pattern. Valid patterns include: PROJ-\d+, #\d+, ENG-\d+,
+      or a URL to a ticket tracker. The specific pattern depends on the project's
+      issue_tracker.provider configuration.
+    rationale: >
+      Untracked TODOs accumulate as hidden tech debt. Linking to a ticket ensures
+      they are prioritised and addressed.
+    applies_to: "**/*.{java,kt,ts,js,py}"
+
+  - id: CQ-004
+    category: Code Quality
+    severity: recommendation
+    name: No empty catch blocks
+    description: >
+      Catch blocks must not silently swallow exceptions without logging or re-throwing.
+    detect: >
+      Look for catch blocks that are empty or only contain a comment. They should
+      at minimum log the exception or re-throw it.
+    rationale: >
+      Swallowed exceptions hide failures, making debugging and incident response
+      significantly harder.
+    applies_to: "**/*.{java,kt}"
+
+  # ─── Testing ────────────────────────────────────────────────────────────────
+
+  - id: TST-001
+    category: Testing
+    severity: recommendation
+    name: New logic has corresponding tests
+    description: >
+      New public methods or significant logic branches should have accompanying unit tests.
+    detect: >
+      Compare new/modified source files against test files. If a new public method
+      is added in src/main but no corresponding test method exists in src/test,
+      flag it.
+    rationale: >
+      Untested code is unverified code. Tests provide confidence in correctness
+      and catch regressions early.
+    applies_to: "**/*.{java,kt}"
+    exclude: "**/test/**"
+
+  - id: TST-002
+    category: Testing
+    severity: required
+    name: No skipped tests added
+    description: >
+      New @Disabled, @Ignore, or skipped test annotations should not be introduced.
+    detect: >
+      Look for newly added @Disabled, @Ignore, @Skip annotations or .skip() calls
+      in test files that were not present before.
+    rationale: >
+      Skipped tests indicate incomplete work or broken functionality that should
+      be addressed, not silenced.
+    applies_to: "**/test/**/*.{java,kt}"
+
+  # ─── Architecture ──────────────────────────────────────────────────────────
+
+  - id: ARCH-001
+    category: Architecture
+    severity: recommendation
+    name: Respect layered architecture
+    description: >
+      Controllers should not directly access repositories. Service layer must mediate.
+    detect: >
+      Check if controller classes import or inject repository classes directly.
+      Controllers should only depend on service-layer classes.
+    rationale: >
+      Bypassing the service layer couples presentation to persistence, breaks
+      transaction boundaries, and prevents reuse of business logic.
+    applies_to: "**/*Controller*.{java,kt}"
+
+  - id: ARCH-002
+    category: Architecture
+    severity: suggestion
+    name: No circular dependencies
+    description: >
+      Service classes should not have circular dependency chains.
+    detect: >
+      Check if two or more service classes mutually inject each other (A depends on B,
+      B depends on A). Look for constructor injection patterns that form cycles.
+    rationale: >
+      Circular dependencies make code harder to test, reason about, and can cause
+      runtime initialization failures.
+    applies_to: "**/*Service*.{java,kt}"
+
+  # ─── Performance ───────────────────────────────────────────────────────────
+
+  - id: PERF-001
+    category: Performance
+    severity: recommendation
+    name: No N+1 query patterns
+    description: >
+      Database queries inside loops must be avoided. Use batch fetching or joins.
+    detect: >
+      Look for repository/DAO method calls inside for/while/forEach loops, or
+      stream operations that execute a query per element.
+    rationale: >
+      N+1 queries cause linear database load growth and are a leading cause of
+      latency issues under load.
+    applies_to: "**/*.{java,kt}"
+    exclude: "**/test/**"
+
+  - id: PERF-002
+    category: Performance
+    severity: suggestion
+    name: Pagination on list endpoints
+    description: >
+      API endpoints returning collections should support pagination.
+    detect: >
+      Check controller methods returning List<> or Collection<> types. They should
+      accept page/size parameters or use Spring's Pageable.
+    rationale: >
+      Unbounded list endpoints can return thousands of records, causing memory
+      pressure and slow response times.
+    applies_to: "**/*Controller*.{java,kt}"
+
+  # ─── Style & Convention ────────────────────────────────────────────────────
+
+  - id: STYLE-001
+    category: Style
+    severity: suggestion
+    name: Consistent naming conventions
+    description: >
+      Classes use PascalCase, methods/variables use camelCase, constants use UPPER_SNAKE_CASE.
+    detect: >
+      Look for class names not in PascalCase, method/variable names not in camelCase,
+      or static final fields not in UPPER_SNAKE_CASE.
+    rationale: >
+      Consistent naming improves readability and reduces cognitive load when
+      navigating unfamiliar code.
+    applies_to: "**/*.{java,kt}"
+
+  - id: STYLE-002
+    category: Style
+    severity: suggestion
+    name: Meaningful variable names
+    description: >
+      Variables should have descriptive names. Avoid single-letter names outside loop indices.
+    detect: >
+      Look for single-letter variable names (excluding i, j, k in loops) or
+      overly abbreviated names that don't convey meaning.
+    rationale: >
+      Descriptive names make code self-documenting and reduce the need for comments.
+    applies_to: "**/*.{java,kt,ts,js}"
+
+  # ─── Documentation ─────────────────────────────────────────────────────────
+
+  - id: DOC-001
+    category: Documentation
+    severity: suggestion
+    name: Public APIs have doc comments
+    description: >
+      Public service methods and controller endpoints should have Javadoc/KDoc comments.
+    detect: >
+      Check public methods in service and controller classes for presence of
+      documentation comments (/** ... */ or equivalent).
+    rationale: >
+      API documentation helps other developers understand intent, parameters,
+      and expected behaviour without reading implementation.
+    applies_to: "**/*{Service,Controller}*.{java,kt}"
+
+  - id: DOC-002
+    category: Documentation
+    severity: recommendation
+    name: Breaking changes documented
+    description: >
+      Changes to public API contracts (endpoints, request/response shapes) must be
+      noted in commit message or MR/PR description.
+    detect: >
+      Check if modified controller method signatures, DTO field changes, or
+      removed endpoints are mentioned in the MR/PR description or commit messages.
+    rationale: >
+      Undocumented breaking changes cause integration failures for consumers
+      and erode trust between teams.
+    applies_to: "**/*Controller*.{java,kt}"

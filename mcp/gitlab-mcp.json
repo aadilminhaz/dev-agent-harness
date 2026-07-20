@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "gitlab": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@zereight/mcp-gitlab@latest",
+        "--token=${GITLAB_PERSONAL_ACCESS_TOKEN}",
+        "--api-url=${GITLAB_API_URL}"
+      ],
+      "env": {
+        "GITLAB_PERSONAL_ACCESS_TOKEN": "${GITLAB_PERSONAL_ACCESS_TOKEN}",
+        "GITLAB_API_URL": "${GITLAB_API_URL}",
+        "USE_PIPELINE": "true"
+      }
+    }
+  }
+}
